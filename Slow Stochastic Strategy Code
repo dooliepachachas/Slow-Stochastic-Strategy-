@@ -1,0 +1,94 @@
+{ Search Tag: WA-Stochastic Slow LE }
+
+inputs: 
+	Length( 14 ) [DisplayName = "Length", ToolTip = 
+	 "Enter the length for the Stochastic calculation."], 
+	OverSold( 20 ) [DisplayName = "OverSold", ToolTip = 
+	 "Enter the level of slow stochastics (Slow K) at which you consider the market to be oversold (too low)."],
+	PriceH( numericseries ),  
+	PriceL( numericseries ), 
+	PriceC( numericseries ), 
+	StochLength( numericsimple ), 
+	Length1( numericsimple ), 		//Must be a constant > 0
+	Length2( numericsimple ), 		//Must be a constant > 0
+	SmoothingType( numericsimple ), //Must be a constant > 0
+	oFastK( numericref ), 
+	oFastD( numericref ), 
+	oSlowK( numericref ), 
+	oSlowD( numericref ) ;
+	
+variables: 
+	ReturnValue( 0 ),
+	oFastK( 0 ), 
+	oFastD( 0 ), 
+	oSlowK( 0 ), 
+	oSlowD( 0 ),
+	Lowestlow( 0 ), 
+	Highesthigh( 0 ), 
+	Numerator1( 0 ),
+	Denominator1( 0 ),
+	Numerator2( 0 ),
+	Denominator2( 0 ),
+	BarsToGo1( 0 ), 
+	BarsToGo2( 0 ) ;
+
+
+//Begin Stochastic Calculations	
+Stochastic = 1 ;
+
+Lowestlow = Lowest( PriceL, StochLength ) ;
+Highesthigh = Highest( PriceH, StochLength ) ;
+Numerator1 = PriceC - Lowestlow ;
+Denominator1 = Highesthigh - Lowestlow ;
+
+if Denominator1 > 0 then
+	oFastK = Numerator1 / Denominator1 * 100 
+else 
+	begin
+	oFastK = 0 ;
+	Stochastic = -1 ;
+	end ;
+
+if SmoothingType = 1 then //Original
+	begin
+	BarsToGo1 = Length1 - CurrentBar ;
+	if BarsToGo1 > 0 and CurrentBar > 0 then
+		begin
+		{ use approximate "backpropagated" calculations until there is enough data }
+		Numerator2 = ( Cum( Numerator1 ) + BarsToGo1 * Numerator1[ CurrentBar - 1 ] ) / Length1 ;
+		Denominator2 = ( Cum( Denominator1 ) + BarsToGo1 * Denominator1[ CurrentBar - 1 ] ) / Length1 ;
+		end
+	else
+		begin
+		Numerator2 = Average( Numerator1, Length1 ) ;
+		Denominator2 = Average( Denominator1, Length1 ) ;
+		end ;
+	if Denominator2 > 0 then
+		oFastD = Numerator2 / Denominator2 * 100 
+	else
+		begin
+		oFastD = 0 ;
+		Stochastic = -1 ;
+		end ;
+	BarsToGo2 = Length2 - CurrentBar ;
+	if BarsToGo2 > 0 and CurrentBar > 0 then
+		{ use approximate "backpropagated" calculations until there is enough data }
+		oSlowD = ( Cum( oFastD ) + BarsToGo2 * oFastD[ CurrentBar - 1 ] ) / Length2 
+	else
+		oSlowD = Average( oFastD, Length2 ) ;
+	end
+else if SmoothingType = 2 then //Legacy
+	begin
+	oFastD = XAverage( oFastK, Length1 ) ;
+	oSlowD = XAverageOrig( oFastD, Length2 ) ;
+	end ;
+
+oSlowK = oFastD ;
+
+ReturnValue = Stochastic( H, L, C, Length, 3, 3, 1, oFastK, oFastD, oSlowK, 
+ oSlowD );
+
+//Current Bar > 2 check used to avoid spurious cross confirmation at CB = 2 
+//at CB = 1, SlowK and SlowD will be the same
+if CurrentBar > 2 and oSlowK crosses over oSlowD and oSlowK < OverSold then
+	Buy ( !( "StochLE" ) ) next bar at market;
