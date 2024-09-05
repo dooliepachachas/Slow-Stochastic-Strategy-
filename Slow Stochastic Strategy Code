@@ -1,5 +1,3 @@
-{ Search Tag: WA-Stochastic Slow LE }
-
 inputs: 
 	Length( 14 ) [DisplayName = "Length", ToolTip = 
 	 "Enter the length for the Stochastic calculation."], 
